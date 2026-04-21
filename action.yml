@@ -1,0 +1,46 @@
+name: 'LocalStack Debug Agent'
+description: 'Uses Claude AI to autonomously diagnose AWS infrastructure failures via the LocalStack App Inspector API.'
+
+inputs:
+  anthropic-api-key:
+    description: 'Anthropic API key for Claude'
+    required: true
+  localstack-endpoint:
+    description: 'LocalStack endpoint URL'
+    required: false
+    default: 'http://localhost:4566'
+  report-path:
+    description: 'Path to save the debug report JSON'
+    required: false
+    default: '/tmp/debug_report.json'
+  upload-artifact:
+    description: 'Upload debug_report.json as a GitHub Actions artifact'
+    required: false
+    default: 'true'
+
+outputs:
+  report-path:
+    description: 'Path to the saved debug report'
+    value: ${{ inputs.report-path }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Install agent dependencies
+      shell: bash
+      run: pip3 install anthropic requests
+
+    - name: Run LocalStack debug agent
+      shell: bash
+      env:
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
+        LOCALSTACK_ENDPOINT: ${{ inputs.localstack-endpoint }}
+        REPORT_PATH: ${{ inputs.report-path }}
+      run: python3 ${{ github.action_path }}/agent.py
+
+    - name: Upload debug report
+      if: ${{ inputs.upload-artifact == 'true' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: debug-report
+        path: ${{ inputs.report-path }}
