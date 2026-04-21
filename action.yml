@@ -17,6 +17,10 @@ inputs:
     description: 'Upload debug_report.json as a GitHub Actions artifact'
     required: false
     default: 'true'
+  github-token:
+    description: 'GitHub token for posting PR comments (pass secrets.GITHUB_TOKEN)'
+    required: false
+    default: ''
 
 outputs:
   report-path:
@@ -44,3 +48,29 @@ runs:
       with:
         name: debug-report
         path: ${{ inputs.report-path }}
+
+    - name: Extract diagnosis for PR comment
+      shell: bash
+      run: |
+        python3 - <<'EOF'
+        import json, sys
+        try:
+            with open("${{ inputs.report-path }}") as f:
+                data = json.load(f)
+            diagnosis = data.get("diagnosis", "No diagnosis available.")
+            comment = "## LocalStack Debug Agent\n\n" + diagnosis + "\n\n---\n*Full trace data available in the `debug-report` artifact.*"
+            with open("/tmp/ls_diagnosis_comment.txt", "w") as f:
+                f.write(comment)
+        except Exception as e:
+            print(f"Could not extract diagnosis: {e}", file=sys.stderr)
+        EOF
+
+    - name: Post diagnosis as PR comment
+      if: ${{ github.event_name == 'pull_request' && inputs.github-token != '' }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+      run: |
+        gh pr comment ${{ github.event.pull_request.number }} \
+          --repo ${{ github.repository }} \
+          --body-file /tmp/ls_diagnosis_comment.txt
